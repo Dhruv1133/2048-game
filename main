@@ -1,0 +1,176 @@
+import tkinter as tk
+from tkinter import messagebox
+import random
+import json
+import os
+
+# Game configuration
+GRID_SIZE = 4
+WINNING_TILE = 2048
+INITIAL_TILES = 2
+BACKGROUND_COLOR = "#BBADA0"
+TILE_COLOR = {
+    0: "#CDC1B4", 2: "#EEE4DA", 4: "#EDE0C8", 8: "#F2B179",
+    16: "#F59563", 32: "#F67C5F", 64: "#F67C5F", 128: "#EDCF72",
+    256: "#EDCC61", 512: "#EDC850", 1024: "#EDC53F", 2048: "#EDC22D",
+}
+FONT_COLOR = {
+    0: "#776E65", 2: "#776E65", 4: "#776E65", 8: "#FFFFFF",
+    16: "#FFFFFF", 32: "#FFFFFF", 128: "#FFFFFF",
+    64: "#FFFFFF", 256: "#FFFFFF", 512: "#FFFFFF",
+    1024: "#FFFFFF", 2048: "#FFFFFF",
+}
+
+class Game2048:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("2048 Game")
+        self.grid = [[0] * GRID_SIZE for _ in range(GRID_SIZE)]
+        self.score = 0
+        self.previous_state = None
+        
+        self.init_ui()
+        self.new_game()
+
+    def init_ui(self):
+        self.canvas = tk.Canvas(self.root, bg=BACKGROUND_COLOR, width=400, height=400)
+        self.canvas.pack()
+
+        self.score_label = tk.Label(self.root, text=f"Score: {self.score}", font=("Arial", 24))
+        self.score_label.pack()
+
+        self.root.bind("<Key>", self.key_event)
+
+    def new_game(self):
+        self.grid = [[0] * GRID_SIZE for _ in range(GRID_SIZE)]
+        self.score = 0
+        self.add_new_tile()
+        self.add_new_tile()
+        self.update_ui()
+
+    def add_new_tile(self):
+        empty_tiles = [(r, c) for r in range(GRID_SIZE) for c in range(GRID_SIZE) if self.grid[r][c] == 0]
+        if empty_tiles:
+            r, c = random.choice(empty_tiles)
+            self.grid[r][c] = random.choice([2, 4])
+
+    def update_ui(self):
+        self.canvas.delete("all")
+        for r in range(GRID_SIZE):
+            for c in range(GRID_SIZE):
+                self.draw_tile(r, c, self.grid[r][c])
+        self.score_label.config(text=f"Score: {self.score}")
+
+    def draw_tile(self, r, c, value):
+        x1 = c * 100 + 5
+        y1 = r * 100 + 5
+        x2 = x1 + 90
+        y2 = y1 + 90
+        color = TILE_COLOR.get(value, "#CDC1B4")
+        self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="")
+        if value != 0:
+            self.canvas.create_text(x1 + 45, y1 + 45, text=str(value), fill=FONT_COLOR.get(value, "#776E65"), font=("Arial", 24))
+
+    def key_event(self, event):
+        if event.keysym in ['Up', 'Down', 'Left', 'Right']:
+            self.move(event.keysym)
+
+    def move(self, direction):
+        moved = False
+        if direction == "Up":
+            for c in range(GRID_SIZE):
+                col = [self.grid[r][c] for r in range(GRID_SIZE) if self.grid[r][c] != 0]
+                new_col, moved_in_col = self.merge(col)
+                for r in range(GRID_SIZE):
+                    if r < len(new_col):
+                        if new_col[r] != self.grid[r][c]:
+                            moved = True
+                        self.grid[r][c] = new_col[r]
+                    else:
+                        self.grid[r][c] = 0
+        elif direction == "Down":
+            for c in range(GRID_SIZE):
+                col = [self.grid[r][c] for r in range(GRID_SIZE) if self.grid[r][c] != 0][::-1]
+                new_col, moved_in_col = self.merge(col)
+                for r in range(GRID_SIZE):
+                    if r < len(new_col):
+                        if new_col[r] != self.grid[GRID_SIZE - 1 - r][c]:
+                            moved = True
+                        self.grid[GRID_SIZE - 1 - r][c] = new_col[r]
+                    else:
+                        self.grid[GRID_SIZE - 1 - r][c] = 0
+        elif direction == "Left":
+            for r in range(GRID_SIZE):
+                row = [self.grid[r][c] for c in range(GRID_SIZE) if self.grid[r][c] != 0]
+                new_row, moved_in_row = self.merge(row)
+                for c in range(GRID_SIZE):
+                    if c < len(new_row):
+                        if new_row[c] != self.grid[r][c]:
+                            moved = True
+                        self.grid[r][c] = new_row[c]
+                    else:
+                        self.grid[r][c] = 0
+        elif direction == "Right":
+            for r in range(GRID_SIZE):
+                row = [self.grid[r][c] for c in range(GRID_SIZE) if self.grid[r][c] != 0][::-1]
+                new_row, moved_in_row = self.merge(row)
+                for c in range(GRID_SIZE):
+                    if c < len(new_row):
+                        if new_row[c] != self.grid[r][GRID_SIZE - 1 - c]:
+                            moved = True
+                        self.grid[r][GRID_SIZE - 1 - c] = new_row[c]
+                    else:
+                        self.grid[r][GRID_SIZE - 1 - c] = 0
+
+        if moved:
+            self.add_new_tile()
+            self.update_ui()
+            if self.check_win():
+                self.show_message("You Win!")
+            if self.is_game_over():
+                self.show_message("Game Over!")
+
+    def merge(self, line):
+        new_line = []
+        skip = False
+
+        for i in range(len(line)):
+            if skip:
+                skip = False
+                continue
+            if i < len(line) - 1 and line[i] == line[i + 1] and line[i] != 0:
+                new_line.append(line[i] * 2)
+                self.score += line[i] * 2
+                skip = True
+            else:
+                new_line.append(line[i])
+
+        while len(new_line) < GRID_SIZE:
+            new_line.append(0)
+
+        return new_line, line != new_line
+
+    def check_win(self):
+        return any(WINNING_TILE in row for row in self.grid)
+
+    def is_game_over(self):
+        if any(0 in row for row in self.grid):
+            return False
+        for r in range(GRID_SIZE):
+            for c in range(GRID_SIZE):
+                if (c < GRID_SIZE - 1 and self.grid[r][c] == self.grid[r][c + 1]) or \
+                   (r < GRID_SIZE - 1 and self.grid[r][c] == self.grid[r + 1][c]):
+                    return False
+        return True
+
+    def show_message(self, message):
+        messagebox.showinfo("Game Over", message)
+        self.new_game()
+
+def main():
+    root = tk.Tk()
+    game = Game2048(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
